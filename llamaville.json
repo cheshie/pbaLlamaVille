@@ -1,0 +1,216 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "description": "System uporządzania lam na posterunku",
+    "version": "1.0.0",
+    "title": "LlamaVille - system zarządzania lamami",
+    "termsOfService": "https://brzydakville.space",
+    "contact": {
+      "email": "llamanager@brzydakville.space"
+    },
+    "license": {
+      "name": "Apache 2.0",
+      "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+    }
+  },
+  "host": "brzydakville.space",
+  "basePath": "/v2",
+  "tags": [
+    {
+      "name": "lama",
+      "description": "Panel operacji CRUD na lamach",
+      "externalDocs": {
+        "description": "Lamy są fajne, tylko trzeba o nie dbać",
+        "url": "https://brzydakville.space"
+      }
+    }
+  ],
+  "schemes": [
+    "https"
+  ],
+  "paths": {
+    "/lama": {
+      "post": {
+        "tags": [
+          "lama"
+        ],
+        "summary": "Dodaj lamię",
+        "description": "Wymagane uwierzytelnienie strażnika lam",
+        "operationId": "registerLama",
+        "produces": [
+          "application/xml",
+          "application/json"
+        ],
+        "security": [
+          {
+            "bville_auth": [
+              "write_lama",
+              "read_lama"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "description": "Created lama object",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/Lama"
+            }
+          },
+          {
+            "name": "X-JWS-SIGNATURE",
+            "in": "header",
+            "description": "integrity verification",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "successful operation"
+          }
+        }
+      }
+    },
+    "/posterunek": {
+      "post": {
+        "tags": [
+          "harmonogram"
+        ],
+        "summary": "Przypisz lamę do posterunku w określonym harmonogramie",
+        "description": "Wymagane uwierzytelnienie strażnika lam",
+        "operationId": "registerSchedule",
+        "produces": [
+          "application/xml",
+          "application/json"
+        ],
+        "security": [
+          {
+            "bville_auth": [
+              "write_lama",
+              "read_lama"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "description": "Created lama object",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/Harmonogram"
+            }
+          },
+          {
+            "name": "X-JWS-SIGNATURE",
+            "in": "header",
+            "description": "integrity verification",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "successful operation"
+          }
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "bville_auth": {
+      "type": "oauth2",
+      "authorizationUrl": "https://brzydakville.space:65536/token",
+      "flow": "implicit",
+      "scopes": {
+        "write_lama": "modify llama for given guard stance",
+        "read_lama": "read llama data"
+      }
+    }
+  },
+  "definitions": {
+    "Harmonogram": {
+      "type": "object",
+      "properties": {
+        "Warta": {
+          "type": "object",
+          "properties": {
+            "lamaID": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "poczatekWarty": {
+              "type": "string"
+            },
+            "koniecWarty": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "Lama": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "imie": {
+          "type": "string"
+        },
+        "wiek": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "rasa": {
+          "type": "object",
+          "items": {
+            "type": "string",
+            "enum": [
+              "lama",
+              "alpaka",
+              "wikunia",
+              "gwanako",
+              "pustynna"
+            ]
+          }
+        },
+        "kolor": {
+          "type": "object",
+          "items": {
+            "type": "string",
+            "enum": [
+              "kremowa",
+              "brazowa",
+              "czarna",
+              "ciapkowana",
+              "kawowa"
+            ]
+          }
+        },
+        "kubraczek": {
+          "type": "string"
+        }
+      },
+      "example": {
+        "id": 1234,
+        "name": "Sniezka",
+        "wiek": 12,
+        "rasa": "lama",
+        "kolor": "kremowa",
+        "kubraczek": "podrozny"
+      },
+      "xml": {
+        "name": "Lama"
+      }
+    }
+  },
+  "externalDocs": {
+    "description": "Find out more about Swagger",
+    "url": "http://swagger.io"
+  }
+}
