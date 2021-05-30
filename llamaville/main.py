@@ -3,12 +3,15 @@
 #   timestamp: 2021-05-26T13:18:58+00:00
 
 from __future__ import annotations
-
 from uuid import UUID
+from fastapi import FastAPI, Query, Depends, HTTPException
 
-from fastapi import FastAPI, Query
+from sqlalchemy.orm import Session
+import cruddb, model
+from database import SessionLocal, engine
+from schemas import *
 
-from .models import LlamaListResponse, ScheduleListResponse
+model.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title='LlamaVille - system zarządzania lamami',
@@ -22,41 +25,56 @@ app = FastAPI(
     version='1.0.0',
 )
 
+# Dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-@app.get('/lama', response_model=LlamaListResponse)
-def get_all_llamas() -> LlamaListResponse:
-    """
+# Llama endpoint - ready, haven't checked delete and update yet
+# posterunek endpoint - to be done 
+
+"""
     Pobierz listę lam
-    """
-    pass
+"""
+@app.get('/lama', response_model=List[Llama])
+async def get_all_llamas(skip: int = 0, limit: 
+                         int = 100, db: 
+                         Session = Depends(get_db)) -> LlamaListResponse:
+    return cruddb.get_llamas(db, skip=skip, limit=limit)
+#
 
-
+"""
+    Dodaj lame
+"""
 @app.post('/lama', response_model=None)
-def register_lama(
-    x__h_m_a_c__s_i_g_n_a_t_u_r_e: str = Query(..., alias='X-HMAC-SIGNATURE')
-) -> None:
-    """
-    Dodaj lamię
-    """
-    pass
+async def register_lama(llamaRequest : CreateRequest,
+                        #X_HMAC_SIGNATURE: str = Query(..., alias='X-HMAC-SIGNATURE'),
+                        db: Session = Depends(get_db)) -> None:
 
+    return cruddb.create_llama(db=db, llama=llamaRequest.llama)
+#   
 
+"""
+    Zaktualizuj lame
+"""
 @app.put('/lama/{id}', response_model=None)
-def update_llama(
-    id: UUID, x__h_m_a_c__s_i_g_n_a_t_u_r_e: str = Query(..., alias='X-HMAC-SIGNATURE')
-) -> None:
-    """
-    Zaktualizuj dane lamy
-    """
-    pass
+async def update_llama(id: int, 
+                       llamaRequest : UpdateRequest,
+                       X_HMAC_SIGNATURE: str = Query(..., alias='X-HMAC-SIGNATURE'),
+                       db: Session = Depends(get_db)) -> None:
+    return cruddb.update_llama(db, llamaRequest)
+#
 
-
+"""
+    Usun lame
+"""
 @app.delete('/lama/{id}', response_model=None)
-def delete_llama(id: UUID) -> None:
-    """
-    Usuń lamę z bazy danych
-    """
-    pass
+async def delete_llama(id: UUID, db: Session = Depends(get_db)) -> None:
+    return cruddb.delete_llama(db, id)
+#
 
 
 @app.get('/posterunek', response_model=ScheduleListResponse)
@@ -69,7 +87,7 @@ def get_schedule() -> ScheduleListResponse:
 
 @app.post('/posterunek', response_model=None)
 def register_schedule(
-    x__h_m_a_c__s_i_g_n_a_t_u_r_e: str = Query(..., alias='X-HMAC-SIGNATURE')
+    X_HMAC_SIGNATURE: str = Query(..., alias='X-HMAC-SIGNATURE')
 ) -> None:
     """
     Przypisz lamę do posterunku w określonym harmonogramie
