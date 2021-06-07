@@ -33,63 +33,82 @@ def get_db():
     finally:
         db.close()
 
-# Llama endpoint - ready, haven't checked delete and update yet
-# posterunek endpoint - to be done 
+# Finished all logic. Now have to implement HTTP responses, exceptions etc. 
 
 """
-    Pobierz listę lam
+    Pobierz listę lam +
 """
 @app.get('/lama', response_model=List[Llama])
-async def get_all_llamas(skip: int = 0, limit: 
-                         int = 100, db: 
-                         Session = Depends(get_db)) -> LlamaListResponse:
-    return cruddb.get_llamas(db, skip=skip, limit=limit)
+async def get_all_llamas( 
+                            db: Session = Depends(get_db)
+                        ) -> LlamaListResponse:
+    return cruddb.get_llamas(db)
 #
 
 """
-    Dodaj lame
+    Dodaj lame +
 """
 @app.post('/lama', response_model=None)
 async def register_lama(llamaRequest : CreateRequest,
                         #X_HMAC_SIGNATURE: str = Query(..., alias='X-HMAC-SIGNATURE'),
                         db: Session = Depends(get_db)) -> None:
-
     return cruddb.create_llama(db=db, llama=llamaRequest.llama)
-#   
+#
 
 """
-    Zaktualizuj lame
+    Zaktualizuj lame + 
 """
 @app.put('/lama/{id}', response_model=None)
 async def update_llama(id: int, 
                        llamaRequest : UpdateRequest,
-                       X_HMAC_SIGNATURE: str = Query(..., alias='X-HMAC-SIGNATURE'),
+                       #X_HMAC_SIGNATURE: str = Query(..., alias='X-HMAC-SIGNATURE'),
                        db: Session = Depends(get_db)) -> None:
-    return cruddb.update_llama(db, llamaRequest)
+    # TODO: Add response 200 here
+    return cruddb.update_llama(db, llamaRequest.llama, id)
 #
 
 """
-    Usun lame
+    Usun lame + 
 """
 @app.delete('/lama/{id}', response_model=None)
-async def delete_llama(id: UUID, db: Session = Depends(get_db)) -> None:
+async def delete_llama(id: int, db: Session = Depends(get_db)) -> None:
     return cruddb.delete_llama(db, id)
 #
 
-
-@app.get('/posterunek', response_model=ScheduleListResponse)
-def get_schedule() -> ScheduleListResponse:
-    """
+"""
     Pobierz listę wszystkich pozycji w harmonogramie z przypisanymi lamami
-    """
-    pass
+"""
+@app.get('/posterunek', response_model=List[Schedule])
+async def get_schedule(
+                        db: Session = Depends(get_db)
+                      ) -> ScheduleListResponse:
+    return cruddb.get_schedules(db)
 
+# todo: this endpoint is not in yaml
+"""
+    Pobierz listę lam która znajduje się na posterunku w danej godzinie
+"""
+@app.get('/posterunek/{schedtime}', response_model=List[Llama])
+async def get_llamas_at_schedule(
+                                    schedtime: datetime,
+                                    db: Session = Depends(get_db)
+                                ) -> LlamaListResponse:
+    return cruddb.get_llamas_at_schedule(db, schedtime=schedtime)
+#
 
+"""
+    Przypisz lamę do posterunku w określonym harmonogramie + 
+"""
 @app.post('/posterunek', response_model=None)
-def register_schedule(
-    X_HMAC_SIGNATURE: str = Query(..., alias='X-HMAC-SIGNATURE')
-) -> None:
-    """
-    Przypisz lamę do posterunku w określonym harmonogramie
-    """
+async def register_schedule(
+                                scheduleRequest: AddScheduleRequest,
+                                db: Session = Depends(get_db),
+                                #X_HMAC_SIGNATURE: str = Query(..., alias='X-HMAC-SIGNATURE')
+                           ) -> None:                     
+    return cruddb.create_schedule(db, schedule=scheduleRequest.schedule)
+
+
+# TODO
+@app.get('/token', response_model=None)
+async def get_token():
     pass

@@ -9,23 +9,22 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 from enum import Enum
 
-class ScheduleBase(BaseModel):
-    pass
+# TODO: Some error handling for models
 
-class ScheduleCreate(ScheduleBase):
-    pass
-
-class Schedule(ScheduleBase):
-    id: int
-    assignee_id: int
-    beginDate: Optional[datetime] = Field(
-        None,
+class Schedule(BaseModel):
+    id: Optional[int] = None
+    assignee_id: int = Field(..., example=1312332)
+    beginDate: datetime = Field(
+        ...,
+        example="2020-11-17T12:08:56.235-0100",
         description="Date format according to ISO_8601 for example: yyyy-MM-dd'T'HH:mm:ss.SSSZ",
     )
-    endDate: Optional[datetime] = Field(
-        None,
+    endDate: datetime = Field(
+        ...,
+        example="2020-11-17T12:08:56.235-0100",
         description="Date format according to ISO_8601 for example: yyyy-MM-dd'T'HH:mm:ss.SSSZ",
     )
+
     class Config:
         orm_mode = True
 
@@ -50,21 +49,17 @@ class Llama(BaseModel):
 class CreateRequest(BaseModel):
     llama: Llama
 
-
 class UpdateRequest(BaseModel):
     llama: Llama
 
 class LlamaListResponse(BaseModel):
     llamaList: List[Llama]
 
-
 class AddScheduleRequest(BaseModel):
     schedule: Schedule
 
-
 class ScheduleListResponse(BaseModel):
     llamaList: Optional[List[Schedule]] = None
-
 
 class Exception(BaseModel):
     code: Optional[int] = None
