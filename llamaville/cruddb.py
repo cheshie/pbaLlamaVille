@@ -4,7 +4,24 @@ import model
 import schemas
 from random import randint
 from datetime import datetime
+from passlib.hash import bcrypt
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
+
+SECRET_KEY = "4c793ed1fa15761c79a777757ce452fcd7ecc8c0d0f0116c943908f466181424"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 2
+xjwssig_pass = "secret123456"
+
+class User:
+    username = 'llamaoperator'
+    password = '$2b$13$eu5qZT4dM1p6bEyMCVc.tu4GpZ2TGfEwGdkhKKYk.9yApHq9pSMem'
+
+def authenticate_user(form: OAuth2PasswordRequestForm):
+    if  bcrypt.verify(form.password , User.password) and form.username == User.username:
+        return True
+    return False
+#
 
 def get_llama(db: Session, llama_id: int):
     return db.query(model.Llama).filter(model.Llama.id == llama_id).first()
@@ -13,19 +30,22 @@ def get_llamas(db: Session, skip: int = 0, limit: int = 100):
     return db.query(model.Llama).offset(skip).limit(limit).all()
 
 def create_llama(db: Session, llama: schemas.Llama):
-    db_llama = model.Llama(
-                    id=randint(0, 1000000),
-                    name=llama.name,
-                    age=llama.age,
-                    breed=llama.breed.value,
-                    color=llama.color,
-                    coat=llama.coat,
-            )
-    
-    db.add(db_llama)
-    db.commit()
-    db.refresh(db_llama)
-    return db_llama
+    try: 
+        db_llama = model.Llama(
+                        id=randint(0, 1000000),
+                        name=llama.name,
+                        age=llama.age,
+                        breed=llama.breed.value,
+                        color=llama.color,
+                        coat=llama.coat,
+                )
+        
+        db.add(db_llama)
+        db.commit()
+        db.refresh(db_llama)
+    except Exception:
+        return False
+    return True
 
 def update_llama(db: Session, llama: schemas.Llama, id: int):
     try:

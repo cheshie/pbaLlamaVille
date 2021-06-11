@@ -5,13 +5,44 @@
 from __future__ import annotations
 from uuid import UUID
 from fastapi import FastAPI, Query, Depends, HTTPException
+from fastapi.responses import Response
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+import secrets
+from passlib.hash import bcrypt
+from passlib.context import CryptContext
+from jose import JWTError, jwt, jws
+from jose.exceptions import ExpiredSignatureError, JWSError
 
 from sqlalchemy.orm import Session
 import cruddb, model
 from database import SessionLocal, engine
 from schemas import *
+from datetime import datetime, timedelta
+from json import loads, dumps
+from requests import request
+from base64 import b64encode
+from fastapi.responses import JSONResponse
+import hmac 
+import hashlib
+from hashlib import sha256
+from fastapi.encoders import jsonable_encoder
 
-model.Base.metadata.create_all(bind=engine)
+# TODO: HMAC VERIFICATION
+# TODO: token generation does not work yet
+"""
+File "/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/jose/jwt.py", line 64, in encode
+    return jws.sign(claims, key, headers=headers, algorithm=algorithm)
+  File "/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/jose/jws.py", line 50, in sign
+    signed_output = _sign_header_and_claims(encoded_header, encoded_payload, algorithm, key)
+  File "/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/jose/jws.py", line 172, in _sign_header_and_claims
+    raise JWSError(e)
+jose.exceptions.JWSError: No PEM start marker "b'-----BEGIN PRIVATE KEY-----'" foun
+"""
+
+
+"""
+    ================= Application specifics and database ===================
+"""
 
 app = FastAPI(
     title='LlamaVille - system zarządzania lamami',
@@ -25,6 +56,7 @@ app = FastAPI(
     version='1.0.0',
 )
 
+model.Base.metadata.create_all(bind=engine)
 # Dependency
 def get_db():
     db = SessionLocal()
@@ -33,50 +65,116 @@ def get_db():
     finally:
         db.close()
 
-# Finished all logic. Now have to implement HTTP responses, exceptions etc. 
+"""
+    ================= Security : OAuth ===================
+"""
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, cruddb.SECRET_KEY, algorithm=cruddb.ALGORITHM)
+    return encoded_jwt
+
+async def oauth_auth(token: str = Depends(oauth2_scheme)):
+    # Get client public key
+    public_key = cruddb.SECRET_KEY
+
+    # Decode token and validate it
+    try:
+        payload = jwt.decode(token, public_key, algorithms=[cruddb.ALGORITHM])
+        username: str = payload.get("client_id")
+        scope: list = payload.get("scope")[0]
+
+        if username != 'llamaoperator':
+            raise CredentialsException
+        if scope != 'llamabville_resource':
+            raise ScopeException
+    except JWTError:
+        raise CredentialsException
+    except ExpiredSignatureError:
+        raise ExpiryException
+    
+    return True
+#
 
 """
-    Pobierz listę lam +
+    Integrity : HMAC
+"""
+def verify_hmac(X_HMAC_SIGNATURE:str, request):
+    raw_request = str(jsonable_encoder(request))
+    generated_sig = hmac.new(
+            cruddb.xjwssig_pass.encode(), 
+            raw_request.encode(), 
+            digestmod=sha256).hexdigest()
+
+    if hmac.compare_digest(X_HMAC_SIGNATURE, generated_sig):
+        return True
+    return False
+#
+
+"""
+    ================== ENDPOINTS ====================
+"""
+
+"""
+    Pobierz listę lam ++
 """
 @app.get('/lama', response_model=List[Llama])
 async def get_all_llamas( 
-                            db: Session = Depends(get_db)
+                            db: Session = Depends(get_db),
                         ) -> LlamaListResponse:
     return cruddb.get_llamas(db)
 #
 
 """
-    Dodaj lame +
+    Dodaj lame ++
 """
 @app.post('/lama', response_model=None)
 async def register_lama(llamaRequest : CreateRequest,
                         #X_HMAC_SIGNATURE: str = Query(..., alias='X-HMAC-SIGNATURE'),
-                        db: Session = Depends(get_db)) -> None:
-    return cruddb.create_llama(db=db, llama=llamaRequest.llama)
+                        db: Session = Depends(get_db),
+                        form_data: OAuth2PasswordBearer = Depends(oauth_auth)
+                        ) -> None:
+    if cruddb.create_llama(db=db, llama=llamaRequest.llama):
+        return Response(status_code=200, content=str({"detail" : "Successfully added llama"}))
+    return HTTPException(status_code=422, detail="Unprocessable entity.")
 #
 
 """
-    Zaktualizuj lame + 
+    Zaktualizuj lame ++
 """
 @app.put('/lama/{id}', response_model=None)
 async def update_llama(id: int, 
                        llamaRequest : UpdateRequest,
                        #X_HMAC_SIGNATURE: str = Query(..., alias='X-HMAC-SIGNATURE'),
-                       db: Session = Depends(get_db)) -> None:
-    # TODO: Add response 200 here
-    return cruddb.update_llama(db, llamaRequest.llama, id)
+                       db: Session = Depends(get_db),
+                       form_data: OAuth2PasswordBearer = Depends(oauth_auth)
+                       ) -> None:
+    if cruddb.update_llama(db, llamaRequest.llama, id):
+        return Response(status_code=200, content=str({"detail" : "Successfully updated llama"}))
+    return HTTPException(status_code=422, detail="Unprocessable entity. Codes: LLAMA_DOES_NOT_EXIST")
 #
 
 """
-    Usun lame + 
+    Usun lame ++
 """
 @app.delete('/lama/{id}', response_model=None)
-async def delete_llama(id: int, db: Session = Depends(get_db)) -> None:
-    return cruddb.delete_llama(db, id)
+async def delete_llama(id: int, db: Session = Depends(get_db),
+                        form_data: OAuth2PasswordBearer = Depends(oauth_auth)
+                      ) -> None:
+    if cruddb.delete_llama(db, id):
+        return Response(status_code=200, content=str({"detail" : "Successfully deleted llama"}))
+    return HTTPException(status_code=422, detail="Unprocessable entity. Codes: LLAMA_DOES_NOT_EXIST")
 #
 
 """
-    Pobierz listę wszystkich pozycji w harmonogramie z przypisanymi lamami
+    Pobierz listę wszystkich pozycji w harmonogramie z przypisanymi lamami ++
 """
 @app.get('/posterunek', response_model=List[Schedule])
 async def get_schedule(
@@ -84,9 +182,8 @@ async def get_schedule(
                       ) -> ScheduleListResponse:
     return cruddb.get_schedules(db)
 
-# todo: this endpoint is not in yaml
 """
-    Pobierz listę lam która znajduje się na posterunku w danej godzinie
+    Pobierz listę lam która znajduje się na posterunku w danej godzinie ++
 """
 @app.get('/posterunek/{schedtime}', response_model=List[Llama])
 async def get_llamas_at_schedule(
@@ -97,18 +194,36 @@ async def get_llamas_at_schedule(
 #
 
 """
-    Przypisz lamę do posterunku w określonym harmonogramie + 
+    Przypisz lamę do posterunku w określonym harmonogramie ++
 """
 @app.post('/posterunek', response_model=None)
 async def register_schedule(
                                 scheduleRequest: AddScheduleRequest,
                                 db: Session = Depends(get_db),
                                 #X_HMAC_SIGNATURE: str = Query(..., alias='X-HMAC-SIGNATURE')
-                           ) -> None:                     
+                                form_data: OAuth2PasswordBearer = Depends(oauth_auth)
+                           ) -> None:
     return cruddb.create_schedule(db, schedule=scheduleRequest.schedule)
 
 
-# TODO
-@app.get('/token', response_model=None)
-async def get_token():
-    pass
+"""
+    OAuth - get access token
+"""
+@app.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()) -> Token:
+    user = cruddb.authenticate_user(form_data)
+    if not user:
+        raise CredentialsException
+
+    access_token_expires = timedelta(minutes=cruddb.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={
+            "scope": ["llamabville_resource"],
+            "jti": "caec1b86-c87d-11eb-a6db-1e003a14a776",
+            "client_id": "llamaoperator"
+        }, 
+        expires_delta=access_token_expires
+    )
+
+    return {"access_token": access_token, "token_type": "bearer"}
+#

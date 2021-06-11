@@ -6,10 +6,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, conint, constr, validator, ValidationError
 from enum import Enum
+from string import ascii_letters
+from fastapi import status, HTTPException
 
-# TODO: Some error handling for models
+""" =========== App models ============"""
 
 class Schedule(BaseModel):
     id: Optional[int] = None
@@ -37,7 +39,7 @@ class Breed(Enum):
 class Llama(BaseModel):
     id: Optional[int] = None
     name: str = Field(..., example='Sniezka')
-    age: int = Field(..., example=10)
+    age: conint(ge=1, le=100) = Field(..., example=10)
     breed: Breed = Field(..., example="wikunia")
     color: str = Field(..., example='brown')
     coat: str = Field(..., example='podrozny')
@@ -45,7 +47,24 @@ class Llama(BaseModel):
     class Config:
         orm_mode = True
 
+    @validator('name')
+    def name_cannot_contain_numbers(cls, v):
+        # If any of characters is not a letter, throw
+        if any(True for e in v if e not in ascii_letters):
+            raise ValueError('name can only contain letters')
+        return v
+    #
 
+    @validator('color')
+    def color_cannot_contain_numbers(cls, v):
+        # If any of characters is not a letter, throw
+        if any(True for e in v if e not in ascii_letters):
+            raise ValueError('color can only contain letters')
+        return v
+    #
+#
+
+""" =========== Requests ============"""
 class CreateRequest(BaseModel):
     llama: Llama
 
@@ -61,6 +80,37 @@ class AddScheduleRequest(BaseModel):
 class ScheduleListResponse(BaseModel):
     llamaList: Optional[List[Schedule]] = None
 
-class Exception(BaseModel):
-    code: Optional[int] = None
-    detail: Optional[str] = None
+""" =========== OAuth token ============"""
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
+
+""" =========== Errors / Exceptions ============"""
+class CustomHttpException(Exception):
+    def __init__(self, message: str, sendDate: str, requestId : str, status_code : int, code : str):
+        self.code = code
+        self.message = message
+        self.requestId = requestId
+        self.sendDate = sendDate
+        self.status_code = status_code
+    def __str__(self):
+        return str(self.__dict__)
+
+CredentialsException = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+ScopeException = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Scope of token is not valid",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+ExpiryException = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Token has already expired",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
