@@ -114,3 +114,7 @@ ExpiryException = HTTPException(
         detail="Token has already expired",
         headers={"WWW-Authenticate": "Bearer"},
     )
+IntegrityException = HTTPException(
+    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+    detail="Could not verify integrity of the request",
+)

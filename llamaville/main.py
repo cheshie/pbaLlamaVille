@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 from uuid import UUID
-from fastapi import FastAPI, Query, Depends, HTTPException
+from fastapi import FastAPI, Query, Depends, Header, HTTPException
 from fastapi.responses import Response
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import secrets
@@ -26,18 +26,6 @@ import hmac
 import hashlib
 from hashlib import sha256
 from fastapi.encoders import jsonable_encoder
-
-# TODO: HMAC VERIFICATION
-# TODO: token generation does not work yet
-"""
-File "/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/jose/jwt.py", line 64, in encode
-    return jws.sign(claims, key, headers=headers, algorithm=algorithm)
-  File "/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/jose/jws.py", line 50, in sign
-    signed_output = _sign_header_and_claims(encoded_header, encoded_payload, algorithm, key)
-  File "/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/jose/jws.py", line 172, in _sign_header_and_claims
-    raise JWSError(e)
-jose.exceptions.JWSError: No PEM start marker "b'-----BEGIN PRIVATE KEY-----'" foun
-"""
 
 
 """
@@ -107,10 +95,11 @@ async def oauth_auth(token: str = Depends(oauth2_scheme)):
     Integrity : HMAC
 """
 def verify_hmac(X_HMAC_SIGNATURE:str, request):
-    raw_request = str(jsonable_encoder(request))
+    rq_dict = jsonable_encoder(request)
+    rq_dict.pop('id', None)
     generated_sig = hmac.new(
             cruddb.xjwssig_pass.encode(), 
-            raw_request.encode(), 
+            str(rq_dict).encode(), 
             digestmod=sha256).hexdigest()
 
     if hmac.compare_digest(X_HMAC_SIGNATURE, generated_sig):
@@ -137,10 +126,15 @@ async def get_all_llamas(
 """
 @app.post('/lama', response_model=None)
 async def register_lama(llamaRequest : CreateRequest,
-                        #X_HMAC_SIGNATURE: str = Query(..., alias='X-HMAC-SIGNATURE'),
+                        X_HMAC_SIGNATURE: str = Header(None),
                         db: Session = Depends(get_db),
                         form_data: OAuth2PasswordBearer = Depends(oauth_auth)
                         ) -> None:
+
+    # Verify that the request has not been tampered with
+    if not verify_hmac(X_HMAC_SIGNATURE, llamaRequest.llama):
+        raise IntegrityException
+    
     if cruddb.create_llama(db=db, llama=llamaRequest.llama):
         return Response(status_code=200, content=str({"detail" : "Successfully added llama"}))
     return HTTPException(status_code=422, detail="Unprocessable entity.")
@@ -152,10 +146,14 @@ async def register_lama(llamaRequest : CreateRequest,
 @app.put('/lama/{id}', response_model=None)
 async def update_llama(id: int, 
                        llamaRequest : UpdateRequest,
-                       #X_HMAC_SIGNATURE: str = Query(..., alias='X-HMAC-SIGNATURE'),
+                       X_HMAC_SIGNATURE: str = Header(None),
                        db: Session = Depends(get_db),
                        form_data: OAuth2PasswordBearer = Depends(oauth_auth)
                        ) -> None:
+    # Verify that the request has not been tampered with
+    if not verify_hmac(X_HMAC_SIGNATURE, llamaRequest.llama):
+        raise IntegrityException
+
     if cruddb.update_llama(db, llamaRequest.llama, id):
         return Response(status_code=200, content=str({"detail" : "Successfully updated llama"}))
     return HTTPException(status_code=422, detail="Unprocessable entity. Codes: LLAMA_DOES_NOT_EXIST")
@@ -200,9 +198,13 @@ async def get_llamas_at_schedule(
 async def register_schedule(
                                 scheduleRequest: AddScheduleRequest,
                                 db: Session = Depends(get_db),
-                                #X_HMAC_SIGNATURE: str = Query(..., alias='X-HMAC-SIGNATURE')
+                                X_HMAC_SIGNATURE: str = Header(None),
                                 form_data: OAuth2PasswordBearer = Depends(oauth_auth)
                            ) -> None:
+    # Verify that the request has not been tampered with
+    if not verify_hmac(X_HMAC_SIGNATURE, scheduleRequest.llama):
+        raise IntegrityException
+
     return cruddb.create_schedule(db, schedule=scheduleRequest.schedule)
 
 
